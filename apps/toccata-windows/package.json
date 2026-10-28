@@ -1,0 +1,45 @@
+{
+  "name": "toccata-windows",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Windows port of Toccata",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.js tests/electron-smoke.cjs tests/exit-flush.cjs tests/login-start.cjs tests/synthetic-capture.cjs tests/split-icon-smoke.cjs tests/native-window-smoke.cjs tests/layout-integration.cjs",
+    "build:native": "powershell -NoProfile -ExecutionPolicy Bypass -File native/build.ps1",
+    "pack": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "@fluentui/svg-icons": "^1.1.344",
+    "electron": "45.1.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "org.toccata.windows",
+    "productName": "Toccata",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "data/**/*",
+      "renderer/**/*",
+      "native/raw_input_helper.exe",
+      "package.json",
+      "LICENSE",
+      "!renderer/.qa-data/**",
+      "!renderer/test-preview.png"
+    ],
+    "asarUnpack": [
+      "native/raw_input_helper.exe"
+    ],
+    "win": {
+      "target": [
+        "dir"
+      ],
+      "icon": "assets/icon.ico"
+    }
+  }
+}

@@ -9,3 +9,10 @@ dist/
 *.sqlite-wal
 *.sqlite-shm
 apps/toccata-studio/Resources/build-info.json
+
+# Local Windows runtime data and experimental executables are not source assets.
+**/Toccata-data/
+**/Toccata-Windows-Data/
+**/electron-profile/
+**/app-identity.key
+experiments/windows-raw-input/*.exe

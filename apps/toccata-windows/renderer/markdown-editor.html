@@ -1,0 +1,748 @@
+
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+:root {
+    color-scheme: light;
+    --editor-text: #333333;
+    --editor-placeholder: #8a8a8a;
+    --editor-link: #005cc5;
+    --editor-code-text: #333333;
+    --editor-code-background: rgba(0, 0, 0, 0.05);
+    --editor-quote-text: #6e6e73;
+    --editor-border: rgba(0, 0, 0, 0.14);
+    --editor-scrollbar: rgba(0, 0, 0, 0.20);
+    --editor-scrollbar-hover: rgba(0, 0, 0, 0.35);
+    --editor-selection: #b5d5ff;
+    --editor-selection-text: #111111;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; background: transparent; overflow: hidden; }
+body { font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+#editor {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding: 6px 8px;
+    overflow: auto;
+    outline: none;
+    color: var(--editor-text);
+    caret-color: var(--editor-text);
+    font-size: 12px;
+    line-height: 1.55;
+    tab-size: 4;
+    -webkit-font-smoothing: antialiased;
+}
+#editor:empty::before {
+    content: attr(data-placeholder);
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    right: 8px;
+    color: var(--editor-placeholder);
+    pointer-events: none;
+}
+#editor::-webkit-scrollbar { width: 8px; height: 8px; }
+#editor::-webkit-scrollbar-track { background: transparent; }
+#editor::-webkit-scrollbar-thumb {
+    background: var(--editor-scrollbar);
+    border: 2px solid transparent;
+    border-radius: 4px;
+    background-clip: content-box;
+}
+#editor::-webkit-scrollbar-thumb:hover { background-color: var(--editor-scrollbar-hover); }
+#editor::-webkit-scrollbar-button { display: none; }
+#editor::-webkit-scrollbar-corner { background: transparent; }
+#editor ::selection, #editor::selection {
+    background: var(--editor-selection);
+    color: var(--editor-selection-text);
+}
+p { margin: 0 0 8px; }
+h1, h2, h3, h4, h5, h6 { margin: 0 0 8px; line-height: 1.35; }
+h1 { font-size: 18px; }
+h2 { font-size: 16px; }
+h3 { font-size: 14px; }
+h4, h5, h6 { font-size: 12px; }
+ul, ol { margin: 0 0 8px; padding-left: 22px; }
+blockquote { margin: 0 0 8px; padding-left: 8px; border-left: 2px solid var(--editor-border); color: var(--editor-quote-text); }
+a { color: var(--editor-link); text-decoration: underline; }
+code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: var(--editor-code-text);
+    background: var(--editor-code-background);
+    padding: 1px 4px;
+    border-radius: 4px;
+}
+pre {
+    margin: 0 0 8px;
+    padding: 10px;
+    overflow: auto;
+    border-radius: 7px;
+    background: var(--editor-code-background);
+    color: var(--editor-code-text);
+    border: 1px solid var(--editor-border);
+    white-space: pre-wrap;
+}
+pre code { font: inherit; color: inherit; background: transparent; padding: 0; border-radius: 0; }
+hr { border: 0; border-top: 1px solid var(--editor-border); margin: 10px 0; }
+</style>
+</head>
+<body>
+<div id="editor" contenteditable="true" spellcheck="false" autocorrect="off" autocomplete="off" autocapitalize="off"></div>
+<script>
+const editor = document.getElementById('editor');
+editor.dataset.placeholder = "用 Markdown 记录详情";
+let composing = false;
+let normalizeTimer = null;
+let markdownRevision = 0;
+
+function esc(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function inline(text) {
+    return text.split(/(`[^`\n]+`)/g).map(part => {
+        if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+            return '<code>' + esc(part.slice(1, -1)) + '</code>';
+        }
+        return formatInline(part);
+    }).join('');
+}
+
+function unescapeMarkdown(text) {
+    let result = '';
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        if (character === String.fromCharCode(92) && index + 1 < text.length
+            && '`*_[]~'.includes(text[index + 1])) {
+            result += text[index + 1];
+            index += 1;
+        } else {
+            result += character;
+        }
+    }
+    return result;
+}
+
+function formatInline(text) {
+    let value = esc(unescapeMarkdown(text));
+    value = value.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>');
+    value = value.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    value = value.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    value = value.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+    value = value.replace(/(^|[^_])_([^_]+)_/g, '$1<em>$2</em>');
+    return value.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+}
+
+function parse(markdown, preservePlainLines = false) {
+    const lines = markdown.replace(/\r\n/g, '\n').split('\n');
+    const output = [];
+    let index = 0;
+    while (index < lines.length) {
+        const line = lines[index].trim();
+        if (!line) {
+            const start = index;
+            while (index < lines.length && !lines[index].trim()) { index += 1; }
+            // Two newlines separate paragraphs. Additional empty
+            // paragraphs, including the last editing line, must survive
+            // saving and opening the editor again.
+            const blankLines = index - start;
+            const onlyBlankParagraphs = start === 0 && index === lines.length;
+            const emptyParagraphs = onlyBlankParagraphs && markdown.length
+                ? Math.floor((blankLines + 1) / 2) : Math.floor(blankLines / 2);
+            for (let blank = 0; blank < emptyParagraphs; blank += 1) {
+                output.push('<p><br></p>');
+            }
+            continue;
+        }
+        const fence = line.match(/^(`{3}|~{3})\s*(.*)$/);
+        if (fence) {
+            const marker = fence[1];
+            const code = [];
+            index += 1;
+            while (index < lines.length && lines[index].trim() !== marker) {
+                code.push(lines[index]);
+                index += 1;
+            }
+            if (index < lines.length) { index += 1; }
+            output.push('<pre' + (fence[2] ? ' data-language="' + esc(fence[2]) + '"' : '') + '><code>' + esc(code.join('\n')) + '</code></pre>');
+            continue;
+        }
+        const heading = line.match(/^(#{1,6})\s+(.+)$/);
+        if (heading) {
+            output.push('<h' + heading[1].length + '>' + inline(heading[2]) + '</h' + heading[1].length + '>');
+            index += 1;
+            continue;
+        }
+        if (/^([-*_])\1\1+$/.test(line)) { output.push('<hr>'); index += 1; continue; }
+        const bullet = line.match(/^[-+*]\s+(.+)$/);
+        if (bullet) {
+            const items = [bullet[1]];
+            index += 1;
+            while (index < lines.length) {
+                const next = lines[index].trim().match(/^[-+*]\s+(.+)$/);
+                if (!next) { break; }
+                items.push(next[1]);
+                index += 1;
+            }
+            output.push('<ul>' + items.map(item => '<li>' + inline(item) + '</li>').join('') + '</ul>');
+            continue;
+        }
+        const ordered = line.match(/^(\d+)[.)]\s+(.+)$/);
+        if (ordered) {
+            const items = [[ordered[1], ordered[2]]];
+            index += 1;
+            while (index < lines.length) {
+                const next = lines[index].trim().match(/^(\d+)[.)]\s+(.+)$/);
+                if (!next) { break; }
+                items.push([next[1], next[2]]);
+                index += 1;
+            }
+            output.push('<ol start="' + ordered[1] + '">' + items.map(item => '<li>' + inline(item[1]) + '</li>').join('') + '</ol>');
+            continue;
+        }
+        if (line.startsWith('>')) {
+            const quoted = [line.slice(1).trim()];
+            index += 1;
+            while (index < lines.length && lines[index].trim().startsWith('>')) {
+                quoted.push(lines[index].trim().slice(1).trim());
+                index += 1;
+            }
+            output.push('<blockquote>' + quoted.map(item => inline(item)).join('<br>') + '</blockquote>');
+            continue;
+        }
+        const paragraph = [];
+        while (index < lines.length && lines[index].trim() && !isBlockStart(lines[index].trim())) {
+            paragraph.push(lines[index].trim());
+            index += 1;
+        }
+        if (preservePlainLines) {
+            output.push(...paragraph.map(line => '<p>' + inline(line) + '</p>'));
+        } else {
+            output.push('<p>' + inline(paragraph.join(' ')) + '</p>');
+        }
+    }
+    return output.join('');
+}
+
+function isBlockStart(line) {
+    return /^(`{3}|~{3})/.test(line) || /^(#{1,6})\s+/.test(line)
+        || /^([-*_])\1\1+$/.test(line) || /^[-+*]\s+/.test(line)
+        || /^\d+[.)]\s+/.test(line) || line.startsWith('>');
+}
+
+function plain(text, canonical) {
+    if (!canonical) { return text; }
+    return Array.from(text).map(character =>
+        '`*_[]~'.includes(character) ? String.fromCharCode(92) + character : character
+    ).join('');
+}
+
+function inlineMarkdown(node, canonical) {
+    if (node.nodeType === Node.TEXT_NODE) { return plain(node.nodeValue, canonical); }
+    if (node.tagName === 'BR') { return '\n'; }
+    const content = Array.from(node.childNodes).map(child => inlineMarkdown(child, canonical)).join('');
+    switch (node.tagName) {
+        case 'STRONG': case 'B': return '**' + content + '**';
+        case 'EM': case 'I': return '*' + content + '*';
+        case 'DEL': case 'S': case 'STRIKE': return '~~' + content + '~~';
+        case 'CODE': {
+            const fence = node.textContent.includes('`') ? '``' : '`';
+            return fence + node.textContent + fence;
+        }
+        case 'A': return '[' + content + '](' + node.getAttribute('href') + ')';
+        default: return content;
+    }
+}
+
+function blockMarkdown(node, canonical) {
+    switch (node.tagName) {
+        case 'H1': case 'H2': case 'H3': case 'H4': case 'H5': case 'H6':
+            return '#'.repeat(Number(node.tagName.slice(1))) + ' ' + inlineMarkdown(node, canonical);
+        case 'UL':
+            return Array.from(node.children).filter(child => child.tagName === 'LI')
+                .map(child => '- ' + inlineMarkdown(child, canonical)).join('\n');
+        case 'OL': {
+            const start = Number(node.getAttribute('start') || 1);
+            return Array.from(node.children).filter(child => child.tagName === 'LI')
+                .map((child, index) => String(start + index) + '. ' + inlineMarkdown(child, canonical)).join('\n');
+        }
+        case 'BLOCKQUOTE':
+            return '> ' + inlineMarkdown(node, canonical).replace(/\n/g, '\n> ');
+        case 'PRE':
+            return '```' + (node.getAttribute('data-language') || '') + '\n' + node.textContent + '\n```';
+        case 'HR': return '---';
+        default: return inlineMarkdown(node, canonical);
+    }
+}
+
+function getMarkdown(canonical = true) {
+    return Array.from(editor.childNodes).filter(node => {
+        // Formatting may leave empty inline text nodes. A blank P/DIV,
+        // however, is a real line the user is still editing.
+        return ['P', 'DIV'].includes(node.tagName)
+            || blockMarkdown(node, canonical).trim().length > 0;
+    }).map(node => {
+        if (node.nodeType === Node.TEXT_NODE) { return plain(node.nodeValue, canonical); }
+        if (['P', 'DIV'].includes(node.tagName) && !node.textContent.length) { return ''; }
+        return blockMarkdown(node, canonical);
+    }).join('\n\n');
+}
+
+function caretOffset() {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) { return null; }
+    const range = selection.getRangeAt(0);
+    const preceding = range.cloneRange();
+    preceding.selectNodeContents(editor);
+    preceding.setEnd(range.startContainer, range.startOffset);
+    return preceding.toString().length;
+}
+
+function setCaret(offset) {
+    if (offset === null) { return; }
+    const selection = window.getSelection();
+    const range = document.createRange();
+    let remaining = offset;
+    function visit(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const length = node.nodeValue.length;
+            if (remaining <= length) {
+                range.setStart(node, remaining);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                return true;
+            }
+            remaining -= length;
+        }
+        for (const child of node.childNodes) {
+            if (visit(child)) { return true; }
+        }
+        return false;
+    }
+    if (!visit(editor)) {
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+}
+
+function render(markdown) {
+    const shouldRestoreFocus = document.activeElement === editor;
+    const offset = caretOffset();
+    editor.innerHTML = parse(markdown);
+    if (shouldRestoreFocus) { editor.focus({ preventScroll: true }); }
+    setCaret(offset);
+}
+
+function setMarkdown(markdown) { render(markdown); }
+
+function markdownSnapshot() {
+    return { text: getMarkdown(true), revision: ++markdownRevision };
+}
+
+function notify() {
+    window.parent.postMessage({type: 'toccata-markdown', snapshot: markdownSnapshot()}, '*');
+}
+
+function captureCaret() {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) { return null; }
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.startContainer)) { return null; }
+    const point = range.cloneRange();
+    point.collapse(true);
+    if (range.startContainer.nodeType !== Node.TEXT_NODE) {
+        const container = range.startContainer;
+        if (range.startOffset < container.childNodes.length) {
+            point.selectNodeContents(container.childNodes[range.startOffset]);
+            point.collapse(true);
+        } else {
+            point.selectNodeContents(container);
+            point.collapse(false);
+        }
+    }
+    const caret = { node: point.startContainer, offset: point.startOffset, fallback: caretOffset() };
+    if (caret.node.nodeType === Node.ELEMENT_NODE && caret.offset > 0) {
+        const previous = caret.node.childNodes[caret.offset - 1];
+        caret.exitInline = { STRONG: 'strong', B: 'strong', EM: 'em', I: 'em',
+                             DEL: 'del', S: 'del', STRIKE: 'del' }[previous && previous.tagName];
+    }
+    return caret;
+}
+
+function restoreCaret(caret) {
+    if (!caret) { return; }
+    if (caret.node.isConnected && editor.contains(caret.node)) {
+        const range = document.createRange();
+        let container = caret.node;
+        let offset = caret.offset;
+        if (container.nodeType === Node.TEXT_NODE && !container.nodeValue.length && container.parentNode) {
+            offset = Array.prototype.indexOf.call(container.parentNode.childNodes, container);
+            container = container.parentNode;
+        }
+        const length = container.nodeType === Node.TEXT_NODE
+            ? container.nodeValue.length : container.childNodes.length;
+        range.setStart(container, Math.min(offset, length));
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        const command = { strong: 'bold', em: 'italic', del: 'strikeThrough' }[caret.exitInline];
+        if (command && document.queryCommandState(command)) {
+            document.execCommand(command, false, false);
+        }
+    } else {
+        setCaret(caret.fallback);
+    }
+}
+
+function scheduleNormalize() {
+    clearTimeout(normalizeTimer);
+    normalizeTimer = setTimeout(normalizeEditor, 240);
+}
+
+function textNodes(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) { nodes.push(walker.currentNode); }
+    return nodes;
+}
+
+function replaceTextSegment(node, start, length, content, tag, url, caret) {
+    const source = node.nodeValue;
+    const after = document.createTextNode(source.slice(start + length));
+    const element = document.createElement(tag);
+    element.textContent = content;
+    if (url) { element.href = url; }
+    if (caret && caret.node === node) {
+        if (caret.offset >= start + length) {
+            caret.node = after;
+            caret.offset -= start + length;
+            caret.exitInline = tag;
+        } else if (caret.offset >= start) {
+            caret.node = element.firstChild;
+            caret.offset = Math.min(content.length, caret.offset - start);
+        }
+    }
+    node.nodeValue = source.slice(0, start);
+    node.parentNode.insertBefore(element, node.nextSibling);
+    node.parentNode.insertBefore(after, element.nextSibling);
+}
+
+function formatInlineElements(caret) {
+    const rules = [
+        { regex: /`([^`\n]+)`/, tag: 'code' },
+        { regex: /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/, tag: 'a', url: true },
+        { regex: /\*\*([^*]+)\*\*/, tag: 'strong' },
+        { regex: /__([^_]+)__/, tag: 'strong' },
+        { regex: /~~([^~]+)~~/, tag: 'del' },
+        { regex: /(^|[^*])\*([^*]+)\*/, tag: 'em', prefix: true },
+        { regex: /(^|[^_])_([^_]+)_/, tag: 'em', prefix: true }
+    ];
+    for (const node of textNodes(editor)) {
+        if (['CODE', 'PRE', 'A'].includes(node.parentElement.tagName)) { continue; }
+        for (const rule of rules) {
+            while (true) {
+                const match = rule.regex.exec(node.nodeValue);
+                if (!match) { break; }
+                const prefix = rule.prefix ? match[1].length : 0;
+                replaceTextSegment(node, match.index + prefix, match[0].length - prefix,
+                    rule.prefix ? match[2] : match[1], rule.tag, rule.url ? match[2] : null, caret);
+            }
+        }
+    }
+}
+
+function replaceBlock(block, tag, prefixLength, start, caret) {
+    const replacement = document.createElement(tag);
+    if (tag === 'ol') { replacement.setAttribute('start', String(start)); }
+    const container = tag === 'ul' || tag === 'ol' ? document.createElement('li') : replacement;
+    if (container !== replacement) { replacement.appendChild(container); }
+    while (block.firstChild) {
+        const child = block.firstChild;
+        if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim().length > 0 && prefixLength > 0) {
+            const removed = Math.min(prefixLength, child.nodeValue.length);
+            child.nodeValue = child.nodeValue.slice(removed);
+            if (caret && caret.node === child) { caret.offset = Math.max(0, caret.offset - removed); }
+            prefixLength -= removed;
+        }
+        container.appendChild(child);
+    }
+    block.replaceWith(replacement);
+}
+
+function replaceWithCode(block, match, caret) {
+    const content = match[2].replace(/\n$/, '');
+    const pre = document.createElement('pre');
+    const code = document.createElement('code');
+    const text = document.createTextNode(content);
+    if (match[1]) { pre.dataset.language = match[1]; }
+    if (caret && block.contains(caret.node)) {
+        const preceding = document.createRange();
+        preceding.selectNodeContents(block);
+        preceding.setEnd(caret.node, caret.offset);
+        caret.node = text;
+        caret.offset = Math.min(content.length,
+            Math.max(0, preceding.toString().length - match[0].indexOf('\n') - 1));
+    }
+    code.appendChild(text);
+    pre.appendChild(code);
+    block.replaceWith(pre);
+}
+
+function replaceWithRule(block, caret) {
+    const rule = document.createElement('hr');
+    if (caret && block.contains(caret.node)) {
+        const paragraph = document.createElement('p');
+        const text = document.createTextNode('');
+        paragraph.appendChild(text);
+        paragraph.appendChild(document.createElement('br'));
+        block.replaceWith(rule, paragraph);
+        caret.node = text;
+        caret.offset = 0;
+    } else {
+        block.replaceWith(rule);
+    }
+}
+
+function formatBlocks(caret) {
+    for (const block of Array.from(editor.children)) {
+        const tag = block.tagName;
+        if (tag === 'PRE' || tag === 'CODE') { continue; }
+        const source = blockMarkdown(block, false);
+        const code = source.match(/^```([^\n]*)\n([\s\S]*)```$/);
+        if (code && (tag === 'P' || tag === 'DIV')) {
+            replaceWithCode(block, code, caret);
+            continue;
+        }
+        const text = block.textContent;
+        const heading = text.match(/^(#{1,6})\s+/);
+        if (heading && (tag === 'P' || tag === 'DIV')) {
+            replaceBlock(block, 'h' + heading[1].length, heading[0].length, 0, caret);
+            continue;
+        }
+        if ((tag === 'P' || tag === 'DIV') && /^([-*_])\1\1+$/.test(text.trim())) {
+            replaceWithRule(block, caret);
+            continue;
+        }
+        if ((tag === 'P' || tag === 'DIV') && /^[-+*]\s+/.test(text)) {
+            replaceBlock(block, 'ul', 2, 0, caret);
+            continue;
+        }
+        const ordered = text.match(/^(\d+)[.)]\s+/);
+        if (ordered && (tag === 'P' || tag === 'DIV')) {
+            replaceBlock(block, 'ol', ordered[0].length, Number(ordered[1]), caret);
+            continue;
+        }
+        if ((tag === 'P' || tag === 'DIV') && /^>\s?/.test(text)) {
+            replaceBlock(block, 'blockquote', text.startsWith('> ') ? 2 : 1, 0, caret);
+        }
+    }
+}
+
+function normalizeRootTextBlocks(caret) {
+    for (const node of textNodes(editor)) {
+        if (node.parentElement !== editor) { continue; }
+        const value = node.nodeValue;
+        const code = value.match(/^```([^\n]*)\n([\s\S]*)```$/);
+        if (code) {
+            replaceWithCode(node, code, caret);
+            continue;
+        }
+        if (!value.includes('\n') && !/^(#{1,6}\s|[-+*]\s|\d+[.)]\s|>|```)/.test(value)) { continue; }
+        const fragment = document.createDocumentFragment();
+        let lineStart = 0;
+        for (const line of value.split('\n')) {
+            const paragraph = document.createElement('p');
+            const text = document.createTextNode(line);
+            if (caret && caret.node === node && caret.offset >= lineStart
+                && caret.offset <= lineStart + line.length) {
+                caret.node = text;
+                caret.offset -= lineStart;
+            }
+            paragraph.appendChild(text);
+            if (!line.length) { paragraph.appendChild(document.createElement('br')); }
+            fragment.appendChild(paragraph);
+            lineStart += line.length + 1;
+        }
+        node.replaceWith(fragment);
+    }
+    for (const block of Array.from(editor.children)) {
+        if (['UL', 'OL', 'PRE', 'CODE'].includes(block.tagName)) { continue; }
+        // WebKit uses <p><br></p> (or DIV) for the new empty line.
+        // Splitting its placeholder BR removes the caret's DOM node and
+        // collapses the line during the delayed normalization pass.
+        if (['P', 'DIV'].includes(block.tagName) && !block.textContent.length
+            && block.querySelectorAll('br').length <= 1) {
+            if (!block.querySelector('br')) { block.appendChild(document.createElement('br')); }
+            continue;
+        }
+        const source = blockMarkdown(block, false);
+        const code = source.match(/^```([^\n]*)\n([\s\S]*)```$/);
+        if (code) {
+            replaceWithCode(block, code, caret);
+            continue;
+        }
+        if (!block.querySelector('br')) { continue; }
+        const pieces = [document.createElement(block.tagName)];
+        const children = Array.from(block.childNodes);
+        for (const child of children) {
+            if (child.tagName === 'BR') {
+                // Shift+Return ends with an extra WebKit placeholder BR.
+                // It occupies the new line; it is not a second break.
+                if (child === children[children.length - 1]
+                    && child.previousSibling && child.previousSibling.tagName === 'BR') {
+                    if (caret && caret.node === child) {
+                        caret.node = pieces[pieces.length - 1].firstChild;
+                        caret.offset = 0;
+                    }
+                    continue;
+                }
+                const paragraph = document.createElement('p');
+                const text = document.createTextNode('');
+                paragraph.appendChild(text);
+                if (caret && caret.node === child) {
+                    caret.node = text;
+                    caret.offset = 0;
+                }
+                pieces.push(paragraph);
+            } else {
+                pieces[pieces.length - 1].appendChild(child);
+            }
+        }
+        for (const piece of pieces) {
+            if (!piece.textContent.length && !piece.querySelector('br')) {
+                piece.appendChild(document.createElement('br'));
+            }
+        }
+        block.replaceWith(...pieces);
+    }
+}
+
+function normalizeEditor() {
+    if (composing) { return; }
+    clearTimeout(normalizeTimer);
+    const caret = captureCaret();
+    normalizeRootTextBlocks(caret);
+    formatInlineElements(caret);
+    formatBlocks(caret);
+    notify();
+    restoreCaret(caret);
+}
+
+function flushEditor() {
+    clearTimeout(normalizeTimer);
+    if (composing) { notify(); }
+    else { normalizeEditor(); }
+}
+
+function focusEditor() {
+    editor.focus({ preventScroll: true });
+    if (!editor.textContent.length) { setCaret(0); }
+}
+
+function insertPlainText(text) {
+    if (text.includes('\n') || text.includes('\r')) {
+        // Parse a pasted source once, so Markdown separator lines don't
+        // become extra editable empty paragraphs. Plain lines stay apart.
+        document.execCommand('insertHTML', false, parse(text, true));
+        // Finish a pasted inline span just as incremental formatting
+        // does, so later typing doesn't inherit its bold/italic style.
+        const selection = window.getSelection();
+        if (selection.rangeCount && selection.isCollapsed) {
+            const range = selection.getRangeAt(0);
+            let element = range.startContainer.nodeType === Node.TEXT_NODE
+                ? range.startContainer.parentElement : range.startContainer;
+            let outer = null;
+            const commands = new Set();
+            const inlineTags = ['STRONG', 'B', 'EM', 'I', 'DEL', 'S', 'STRIKE', 'CODE', 'A'];
+            while (element && inlineTags.includes(element.tagName)) {
+                const remaining = document.createRange();
+                remaining.selectNodeContents(element);
+                remaining.setStart(range.startContainer, range.startOffset);
+                if (remaining.toString().length) { break; }
+                const command = { STRONG: 'bold', B: 'bold', EM: 'italic', I: 'italic',
+                                  DEL: 'strikeThrough', S: 'strikeThrough', STRIKE: 'strikeThrough' }[element.tagName];
+                if (command) { commands.add(command); }
+                outer = element;
+                element = element.parentElement;
+            }
+            if (outer) {
+                range.setStartAfter(outer);
+                range.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                for (const command of commands) {
+                    if (document.queryCommandState(command)) { document.execCommand(command, false, false); }
+                }
+            }
+        }
+    } else {
+        document.execCommand('insertText', false, text);
+    }
+}
+
+editor.addEventListener('input', event => {
+    if (composing || event.isComposing) {
+        clearTimeout(normalizeTimer);
+        return;
+    }
+    scheduleNormalize();
+});
+editor.addEventListener('compositionstart', () => {
+    composing = true;
+    clearTimeout(normalizeTimer);
+});
+editor.addEventListener('compositionend', () => {
+    composing = false;
+    scheduleNormalize();
+});
+editor.addEventListener('focus', () => {
+    window.parent.postMessage({type: 'toccata-markdown-focus', focused: true}, '*');
+});
+editor.addEventListener('blur', () => {
+    flushEditor();
+    window.parent.postMessage({type: 'toccata-markdown-focus', focused: false}, '*');
+});
+editor.addEventListener('paste', event => {
+    event.preventDefault();
+    insertPlainText(event.clipboardData.getData('text/plain'));
+});
+editor.addEventListener('keydown', event => {
+    if (event.key === 'Tab') {
+        event.preventDefault();
+        document.execCommand('insertText', false, '\t');
+    }
+});
+function applyPresentation(data) {
+    const root = document.documentElement, dark = data.theme === 'dark';
+    const light = {'--editor-text':'#333333','--editor-placeholder':'#8a8a8a','--editor-link':'#005cc5','--editor-code-text':'#333333','--editor-code-background':'rgba(0,0,0,0.05)','--editor-quote-text':'#6e6e73','--editor-border':'rgba(0,0,0,0.14)','--editor-scrollbar':'rgba(0,0,0,0.20)','--editor-scrollbar-hover':'rgba(0,0,0,0.35)','--editor-selection':'#b5d5ff','--editor-selection-text':'#111111'};
+    const dim = {'--editor-text':'#f4f4f5','--editor-placeholder':'#a1a1aa','--editor-link':'#69aaff','--editor-code-text':'#f4f4f5','--editor-code-background':'rgba(255,255,255,0.12)','--editor-quote-text':'#b7b7bf','--editor-border':'rgba(255,255,255,0.24)','--editor-scrollbar':'rgba(255,255,255,0.3)','--editor-scrollbar-hover':'rgba(255,255,255,0.5)','--editor-selection':'#285b9e','--editor-selection-text':'#ffffff'};
+    root.style.colorScheme = dark ? 'dark' : 'light';
+    for (const [key, value] of Object.entries(dark ? dim : light)) root.style.setProperty(key, value);
+    root.lang = data.language === 'en' ? 'en' : 'zh-CN';
+    if (typeof data.placeholder === 'string') editor.dataset.placeholder = data.placeholder;
+}
+window.addEventListener('message', event => {
+    if (event.source !== window.parent) return;
+    if (event.data?.type === 'toccata-init') {
+        try { applyPresentation(event.data); setMarkdown(String(event.data.markdown || '')); window.parent.postMessage({type: 'toccata-ready', ready: true}, '*'); }
+        catch (_) { window.parent.postMessage({type: 'toccata-ready', ready: false}, '*'); }
+    }
+    else if (event.data?.type === 'toccata-style') applyPresentation(event.data);
+    else if (event.data?.type === 'toccata-focus') focusEditor();
+    else if (event.data?.type === 'toccata-flush') {
+        flushEditor();
+        window.parent.postMessage({type: 'toccata-flushed', request: event.data.request, snapshot: markdownSnapshot()}, '*');
+    }
+});
+</script>
+</body>
+</html>

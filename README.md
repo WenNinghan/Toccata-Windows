@@ -14,10 +14,21 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/KMnO4-zx/Toccata/releases">下载安装</a> ·
+  <a href="https://github.com/WenNinghan/Toccata-Windows/releases/tag/windows-preview-20261029">下载 Windows 预览版</a> ·
+  <a href="https://github.com/KMnO4-zx/Toccata/releases">上游 macOS 下载</a> ·
   <a href="develop.md">开发指南</a> ·
   <a href="LICENSE">Apache-2.0</a>
 </p>
+
+## Windows 移植预览
+
+本 Fork 提供基于 [KMnO4-zx/Toccata](https://github.com/KMnO4-zx/Toccata) 0.1.0 的**非官方 Windows 移植预览版**，代码位于 [`apps/toccata-windows`](apps/toccata-windows)。支持 Windows 原生窗口、任务与托盘、键盘活动统计、68/84/87/104 键布局及自定义；原版 Fn 语音估算在 Windows 版中替换为平均击键频率。
+
+**[下载 Windows 11 x64 预览包](https://github.com/WenNinghan/Toccata-Windows/releases/tag/windows-preview-20261029)** · [浅色界面](docs/images/windows-preview-light.png) · [深色界面](docs/images/windows-preview-dark.png)
+
+使用方法、采集与数据说明、已知问题见 [Windows 预览版说明](docs/windows-preview.md)，构建方法见 [Windows 开发说明](apps/toccata-windows/README.md)。当前不是完整稳定版，也不宣称与原版 100% 等价；上游 Releases 链接不代表提供本移植的 Windows 包。
+
+以下保留原作者的 macOS 项目介绍、创作背景与致谢；其中第一人称描述属于上游作者。原项目和本移植保留 [Apache-2.0](LICENSE) 许可。
 
 ## 起因
 
