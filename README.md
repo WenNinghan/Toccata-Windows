@@ -24,7 +24,7 @@
 
 2026-11-10 预览版 `0.1.5-win.1` 参考上游 v0.1.4–v0.1.5，加入主任务置顶、任务组拖拽、跨窗口共享排序、完成动画和 Windows 更新提示。持续输入、计划日期与跨窗口编辑保护保留，优先级继续用灰、蓝、橙、红和文字区分。见 [任务交互更新](docs/windows-task-updates.md) 与 [上游功能迁移](docs/windows-upstream-v013.md)。
 
-本 Fork 提供 [KMnO4-zx/Toccata](https://github.com/KMnO4-zx/Toccata) 的**非官方 Windows 移植预览版**，最初基于 0.1.0，并移植部分截至 v0.1.5 的功能，代码位于 [`apps/toccata-windows`](apps/toccata-windows)。支持 Windows 原生窗口、任务与托盘、键盘活动统计、68/84/87/104 键布局及自定义；原版 Fn 语音估算在 Windows 版中替换为平均击键频率。
+本仓库由 [WenNinghan](https://github.com/WenNinghan) 维护，提供 [KMnO4-zx](https://github.com/KMnO4-zx) 的 macOS 原作 [Toccata](https://github.com/KMnO4-zx/Toccata) 的**非官方 Windows 移植预览版**，最初基于 0.1.0，并移植部分截至 v0.1.5 的功能，代码位于 [`apps/toccata-windows`](apps/toccata-windows)。支持 Windows 原生窗口、任务与托盘、键盘活动统计、68/84/87/104 键布局及自定义；原版 Fn 语音估算在 Windows 版中替换为平均击键频率。
 
 **[下载 Windows 11 x64 预览包](https://github.com/WenNinghan/Toccata-Windows/releases/tag/v0.1.5-win.1)** · [通用配置](docs/images/windows-v013-settings.png) · [托盘活动](docs/images/windows-v013-tray.png) · [任务日历](docs/images/windows-v013-calendar.png)
 
@@ -32,7 +32,7 @@
 
 以下保留原作者的 macOS 项目介绍、创作背景与致谢；其中第一人称描述属于上游作者。原项目和本移植保留 [Apache-2.0](LICENSE) 许可。
 
-## 起因
+## 上游原作者的创作背景
 
 我以前从来不用 ToDo 应用，觉得事情放在脑子里完全 OK。最近工作、学习的事越来越多，终于还是得找个地方记下来。
 
@@ -79,7 +79,9 @@
 想按自己的习惯修改？构建与二次开发说明都在 [develop.md](develop.md)。
 
 
-## 致谢 🙏
+## 上游原作者的致谢 🙏
+
+以下致谢来自 macOS 原作作者 KMnO4-zx，不代表 Windows 移植维护者的经历或机构对本移植的背书。
 
 - <img src="images/logos/kimi.png" width="20" height="20" alt="Kimi Logo"> &nbsp; 感谢 **[Kimi 全球大使计划](https://www.kimi.com/zh-cn/lp/kimi-ambassador)**。 Kimi K3.1 Pro 是一个在审美设计领域很棒的模型！
 - <img src="images/logos/openai-rounded.svg" width="20" height="20" alt="OpenAI Logo"> &nbsp; 感谢 **[OpenAI Codex For Open Source 计划](https://developers.openai.com/community/codex-for-oss)**，赠予我 12 个月的 ChatGPT Pro 订阅。GPT 6 Astra 是一个很棒的 Coding 模型！

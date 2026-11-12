@@ -24,7 +24,7 @@
 
 The November 10, 2026 preview, `0.1.5-win.1`, adds task pinning, whole-group dragging, shared sorting, completion transitions and a Windows update beacon, inspired by upstream v0.1.4–v0.1.5. It retains the fixes for continuous typing, planned dates and editing across windows. Task priorities use gray, blue, orange and red, with text labels. See the [task interaction updates](docs/windows-task-updates.md) and [upstream migration notes](docs/windows-upstream-v013.md).
 
-This fork provides an **unofficial Windows preview port** of [KMnO4-zx/Toccata](https://github.com/KMnO4-zx/Toccata) under [`apps/toccata-windows`](apps/toccata-windows). Originally based on 0.1.0, it now includes selected features through v0.1.5, native Windows window controls, tasks and tray workflows, keyboard activity statistics, and configurable 68/84/87/104-key layouts. The Windows port replaces the original Fn voice estimate with a keystroke rate based on active minutes.
+Maintained by [WenNinghan](https://github.com/WenNinghan), this fork provides an **unofficial Windows preview port** of the original macOS project [Toccata](https://github.com/KMnO4-zx/Toccata) by [KMnO4-zx](https://github.com/KMnO4-zx), under [`apps/toccata-windows`](apps/toccata-windows). Originally based on 0.1.0, it now includes selected features through v0.1.5, native Windows window controls, tasks and tray workflows, keyboard activity statistics, and configurable 68/84/87/104-key layouts. The Windows port replaces the original Fn voice estimate with a keystroke rate based on active minutes.
 
 **[Download the Windows 11 x64 preview](https://github.com/WenNinghan/Toccata-Windows/releases/tag/v0.1.5-win.1)** · [Settings](docs/images/windows-v013-settings.png) · [Tray activity](docs/images/windows-v013-tray.png) · [Task calendar](docs/images/windows-v013-calendar.png)
 
@@ -32,7 +32,7 @@ Read the [Windows preview notes and known issues](docs/windows-preview.md) and [
 
 The original author's macOS introduction, first-person story and acknowledgements are preserved below. The project retains the [Apache-2.0 license](LICENSE); see [Windows third-party notices](apps/toccata-windows/THIRD-PARTY-NOTICES.md).
 
-## Why I Built This
+## The Upstream Author’s Story
 
 I never used to bother with to-do apps. Keeping everything in my head worked just fine. Then work and study started piling up, and I finally needed somewhere to write things down.
 
@@ -78,7 +78,9 @@ Keyboard tracking requires permission under **System Settings → Privacy & Secu
 
 Want to make it your own? Build instructions and development notes are in [develop.md (Chinese)](develop.md).
 
-## Thanks 🙏
+## Acknowledgements from the Upstream Author 🙏
+
+The following acknowledgements are from KMnO4-zx, the original macOS author. They do not describe the Windows port maintainer’s experience or imply institutional endorsement of this port.
 
 - <img src="images/logos/kimi.png" width="20" height="20" alt="Kimi Logo"> &nbsp; Thanks to the **[Kimi Global Ambassador Program](https://www.kimi.com/zh-cn/lp/kimi-ambassador)**. Kimi K3.1 Pro is a great model for visual design!
 - <img src="images/logos/openai-rounded.svg" width="20" height="20" alt="OpenAI Logo"> &nbsp; Thanks to the **[OpenAI Codex for Open Source program](https://developers.openai.com/community/codex-for-oss)** for giving me 12 months of ChatGPT Pro. GPT 6 Astra is a great coding model!
